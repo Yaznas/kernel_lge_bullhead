@@ -24,6 +24,7 @@
 #include <linux/kernel.h>
 #include <linux/input.h>
 #include <linux/firmware.h>
+#include <linux/workqueue.h>
 #include <sound/soc.h>
 #include <sound/jack.h>
 #include "wcd-mbhc-v2.h"
@@ -68,6 +69,8 @@ enum wcd_mbhc_cs_mb_en_flag {
 	WCD_MBHC_EN_PULLUP,
 	WCD_MBHC_EN_NONE,
 };
+
+struct workqueue_struct	*mbhc_workqueue;
 
 static void wcd_mbhc_jack_report(struct wcd_mbhc *mbhc,
 				struct snd_soc_jack *jack, int status, int mask)
@@ -337,7 +340,7 @@ static void wcd_schedule_hs_detect_plug(struct wcd_mbhc *mbhc,
 	WCD_MBHC_RSC_ASSERT_LOCKED(mbhc);
 	mbhc->hs_detect_work_stop = false;
 	mbhc->mbhc_cb->lock_sleep(mbhc, true);
-	schedule_work(work);
+	queue_work(mbhc_workqueue, work);
 }
 
 /* called under codec_resource_lock acquisition */
@@ -1536,7 +1539,7 @@ irqreturn_t wcd_mbhc_btn_press_handler(int irq, void *data)
 	mask = wcd_mbhc_get_button_mask(mbhc);
 	mbhc->buttons_pressed |= mask;
 	mbhc->mbhc_cb->lock_sleep(mbhc, true);
-	if (schedule_delayed_work(&mbhc->mbhc_btn_dwork,
+	if (queue_delayed_work(mbhc_workqueue, &mbhc->mbhc_btn_dwork,
 				msecs_to_jiffies(400)) == 0) {
 		WARN(1, "Button pressed twice without release event\n");
 		mbhc->mbhc_cb->lock_sleep(mbhc, false);
@@ -1688,6 +1691,9 @@ static int wcd_mbhc_initialise(struct wcd_mbhc *mbhc)
 
 	/* Program Button threshold registers */
 	wcd_program_btn_threshold(mbhc, false);
+
+	mbhc_workqueue = alloc_workqueue("wcd-mbhc-v2_workqueue",
+				WQ_HIGHPRI | WQ_UNBOUND, 0);
 
 	INIT_WORK(&mbhc->correct_plug_swch, wcd_correct_swch_plug);
 	/* enable the WCD MBHC IRQ's */
@@ -1866,7 +1872,7 @@ int wcd_mbhc_start(struct wcd_mbhc *mbhc,
 		rc = wcd_mbhc_initialise(mbhc);
 	} else {
 		if (!mbhc->mbhc_fw || !mbhc->mbhc_cal)
-			schedule_delayed_work(&mbhc->mbhc_firmware_dwork,
+			queue_delayed_work(mbhc_workqueue, &mbhc->mbhc_firmware_dwork,
 				      usecs_to_jiffies(FW_READ_TIMEOUT));
 		else
 			pr_err("%s: Skipping to read mbhc fw, 0x%p %p\n",
@@ -2153,6 +2159,7 @@ void wcd_mbhc_deinit(struct wcd_mbhc *mbhc)
 	if (mbhc->mbhc_cb && mbhc->mbhc_cb->register_notifier)
 		mbhc->mbhc_cb->register_notifier(codec, &mbhc->nblock, false);
 	mutex_destroy(&mbhc->codec_resource_lock);
+	destroy_workqueue(mbhc_workqueue);
 }
 EXPORT_SYMBOL(wcd_mbhc_deinit);
 
