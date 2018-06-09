@@ -1,6 +1,6 @@
 #
 # Manually generated file; DO PLEASE EDIT.
-# Zest Kernel (bullhead) 3.10.108
+# Zest Kernel (bullhead) 3.x
 #
 CONFIG_ARM64=y
 CONFIG_64BIT=y
