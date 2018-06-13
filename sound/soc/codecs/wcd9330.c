@@ -101,7 +101,7 @@ enum {
 #define HPH_PA_ENABLE true
 #define HPH_PA_DISABLE false
 
-#define SLIM_BW_CLK_GEAR_9 6200000
+#define SLIM_BW_CLK_GEAR_9 12400000
 #define SLIM_BW_UNVOTE 0
 
 int g_DebugMode = 0;
